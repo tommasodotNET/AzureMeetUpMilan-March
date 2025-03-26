@@ -1,5 +1,6 @@
 ﻿using Azure.AI.Projects;
 using Azure.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.Agents.AzureAI;
@@ -12,15 +13,26 @@ namespace SemanticKernel.Agents.Scenarios
 {
     public class CreatorWriterScenario
     {
-        protected AgentGroupChat chat;
-        
+        private AgentGroupChat chat;
+        private ContentSafety contentSafety;
+
         public async Task InitializeScenarioAsync(bool useAzureOpenAI)
         {
+
+            var configuration = new ConfigurationBuilder()
+                .AddUserSecrets<Program>()
+                .Build();
+
+            string apiKey = configuration["AzureAIContentSafety:ApiKey"];
+            string endpoint = configuration["AzureAIContentSafety:Endpoint"];
+
+            contentSafety = new ContentSafety(endpoint, apiKey);
+
             //AzureEventSourceListener listener = new AzureEventSourceListener(
             //    (args, text) => Console.WriteLine(text),
             //    level: System.Diagnostics.Tracing.EventLevel.Verbose);
 
-            AIProjectClient client = new AIProjectClient("swedencentral.api.azureml.ms;bc06be43-f36c-449a-b690-4fea320f3e73;ai-agents;ai-agents-project", 
+            AIProjectClient client = new AIProjectClient("swedencentral.api.azureml.ms;bc06be43-f36c-449a-b690-4fea320f3e73;ai-agents;ai-agents-project",
             new DefaultAzureCredential(new DefaultAzureCredentialOptions
             {
                 ExcludeVisualStudioCredential = true,
@@ -157,10 +169,34 @@ namespace SemanticKernel.Agents.Scenarios
         {
             chat.AddChatMessage(new ChatMessageContent(AuthorRole.User, prompt));
             await foreach (var content in chat.InvokeAsync())
-            {
-                Console.WriteLine();
-                Console.WriteLine($"# {content.Role} - {content.AuthorName ?? "*"}: '{content.Content}'");
-                Console.WriteLine();
+            {              
+
+                // Set the media type and blocklists
+                MediaType mediaType = MediaType.Text;
+                string[] blocklists = { "banned_tools" };
+
+                // Detect content safety
+                DetectionResult detectionResult = await contentSafety.Detect(mediaType, content.Content, blocklists);
+
+                // Set the reject thresholds for each category
+                Dictionary<Category, int> rejectThresholds = new Dictionary<Category, int> {
+                { Category.Hate, 4 }, { Category.SelfHarm, 4 }, { Category.Sexual, 4 }, { Category.Violence, 4 }
+            };
+
+                // Make a decision based on the detection result and reject thresholds
+                Decision decisionResult = contentSafety.MakeDecision(detectionResult, rejectThresholds);
+
+                if (decisionResult.SuggestedAction == Action.Reject)
+                {
+                    Console.WriteLine($"The content has been rejected");
+                }
+                else
+                {
+                    Console.WriteLine();
+                    Console.WriteLine($"# {content.Role} - {content.AuthorName ?? "*"}: '{content.Content}'");
+                    Console.WriteLine();
+                }
+
             }
 
             Console.WriteLine($"# IS COMPLETE: {chat.IsComplete}");
