@@ -57,7 +57,7 @@ namespace SemanticKernel.Agents.Scenarios
             ChatCompletionAgent writerAgent = new ChatCompletionAgent(promptTemplate, new LiquidPromptTemplateFactory())
             {
                 Name = writerAgentName,
-                Kernel = KernelCreator.CreateKernel(useAzureOpenAI)
+                Kernel = KernelCreator.CreateKernelWithReasoningModel(useAzureOpenAI)
             };
 
             string reviewerAgentName = "WriterFeedback";

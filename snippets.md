@@ -68,7 +68,7 @@ ChatCompletionAgent reviewerAgent = new ChatCompletionAgent
 {
     Name = reviewerAgentName,
     Instructions = reviewerAgentInstructions,
-    Kernel = KernelCreator.CreateKernel(useAzureOpenAI)
+    Kernel = KernelCreator.CreateKernelWithReasoningModel(useAzureOpenAI)
 };
 ```
 
