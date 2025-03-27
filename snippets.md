@@ -32,7 +32,7 @@ var promptTemplate = KernelFunctionPrompty.ToPromptTemplateConfig(promptyTemplat
 ChatCompletionAgent writerAgent = new ChatCompletionAgent(promptTemplate, new LiquidPromptTemplateFactory())
 {
     Name = writerAgentName,
-    Kernel = KernelCreator.CreateKernel(useAzureOpenAI)
+    Kernel = KernelCreator.CreateKernelWithReasoningModel(useAzureOpenAI)
 };
 ```
 
