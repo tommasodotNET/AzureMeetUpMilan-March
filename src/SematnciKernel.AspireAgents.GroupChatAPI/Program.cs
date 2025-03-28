@@ -53,7 +53,7 @@ builder.AddServiceDefaults();
 builder.AddAzureOpenAIClient("openAiConnectionName");
 builder.Services.AddSingleton(builder => {
     var kernelBuilder = Kernel.CreateBuilder();
-    kernelBuilder.AddAzureOpenAIChatCompletion("gpt-4o", builder.GetService<AzureOpenAIClient>());
+    kernelBuilder.AddAzureOpenAIChatCompletion("gpt-4o-mini", builder.GetService<AzureOpenAIClient>());
     return kernelBuilder.Build();
 });
 var app = builder.Build();

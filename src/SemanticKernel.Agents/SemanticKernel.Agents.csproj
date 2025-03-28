@@ -9,7 +9,6 @@
     <NoWarn>$(NoWarn);CS8618,IDE0009,CA1051,CA1050,CA1707,CA1054,CA2007,VSTHRD111,CS1591,RCS1110,RCS1243,CA5394,SKEXP0001,SKEXP0010,SKEXP0020,SKEXP0040,SKEXP0050,SKEXP0060,SKEXP0070,SKEXP0101,SKEXP0110</NoWarn>
   </PropertyGroup>
 
-
   <ItemGroup>
     <Content Include="..\..\Prompts\writerAgent.prompty">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -17,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Identity" Version="1.12.0" />
+    <PackageReference Include="Azure.Identity" Version="1.13.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.2" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.42.0" />
     <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.42.0-preview" />
