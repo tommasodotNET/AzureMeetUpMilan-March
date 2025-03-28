@@ -1,0 +1,6 @@
+@SematnciKernel.AspireAgents.GroupChatAPI_HostAddress = http://localhost:5159
+
+GET {{SematnciKernel.AspireAgents.GroupChatAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
