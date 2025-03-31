@@ -365,3 +365,4 @@ FodyWeavers.xsd
 *.env
 *.Development.json
 *.Production.json
+/src/SemanticKernel.AspireAgents.AppHost/appsettings.Development.json
