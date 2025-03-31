@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SematnciKernel.AspireAgents.GroupChatAPI\SematnciKernel.AspireAgents.GroupChatAPI.csproj" />
+    <ProjectReference Include="..\SemanticKernel.AspireAgents.GroupChatAPI\SemanticKernel.AspireAgents.GroupChatAPI.csproj" />
   </ItemGroup>
 
 </Project>

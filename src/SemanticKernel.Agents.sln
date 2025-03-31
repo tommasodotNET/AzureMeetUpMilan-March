@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticKernel.AspireAgents
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticKernel.AspireAgents.ServiceDefaults", "SemanticKernel.AspireAgents.ServiceDefaults\SemanticKernel.AspireAgents.ServiceDefaults.csproj", "{258B967E-317B-441F-8224-93B30C0E0FC6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SematnciKernel.AspireAgents.GroupChatAPI", "SematnciKernel.AspireAgents.GroupChatAPI\SematnciKernel.AspireAgents.GroupChatAPI.csproj", "{503005AB-B67E-4462-A76E-7D437DD77C20}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticKernel.AspireAgents.GroupChatAPI", "SemanticKernel.AspireAgents.GroupChatAPI\SemanticKernel.AspireAgents.GroupChatAPI.csproj", "{503005AB-B67E-4462-A76E-7D437DD77C20}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
