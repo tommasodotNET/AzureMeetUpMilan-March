@@ -1,6 +1,6 @@
-using Azure.AI.OpenAI;
 using Azure.AI.Projects;
 using Azure.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.Agents.AzureAI;
@@ -8,54 +8,20 @@ using Microsoft.SemanticKernel.Agents.Chat;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.PromptTemplates.Liquid;
 using Microsoft.SemanticKernel.Prompty;
-using OpenTelemetry;
-using OpenTelemetry.Exporter;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
 using SemanticKernel.Agents;
+using SemanticKernel.AspireAgents.GroupChatAPI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var otelExporterEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
-var otelExporterHeaders = builder.Configuration["OTEL_EXPORTER_OTLP_HEADERS"];
-
 AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnosticsSensitive", true);
-
-var loggerFactory = LoggerFactory.Create(builder =>
-{
-    // Add OpenTelemetry as a logging provider
-    builder.AddOpenTelemetry(options =>
-    {
-        options.AddOtlpExporter(exporter => {exporter.Endpoint = new Uri(otelExporterEndpoint); exporter.Headers = otelExporterHeaders; exporter.Protocol = OtlpExportProtocol.Grpc;});
-        // Format log messages. This defaults to false.
-        options.IncludeFormattedMessage = true;
-    });
-
-    builder.AddTraceSource("Microsoft.SemanticKernel");
-    builder.SetMinimumLevel(LogLevel.Information);
-});
-
-using var traceProvider = Sdk.CreateTracerProviderBuilder()
-    .AddSource("Microsoft.SemanticKernel*")
-    .AddOtlpExporter(exporter => {exporter.Endpoint = new Uri(otelExporterEndpoint); exporter.Headers = otelExporterHeaders; exporter.Protocol = OtlpExportProtocol.Grpc;})
-    .Build();
-
-using var meterProvider = Sdk.CreateMeterProviderBuilder()
-    .AddMeter("Microsoft.SemanticKernel*")
-    .AddOtlpExporter(exporter => {exporter.Endpoint = new Uri(otelExporterEndpoint); exporter.Headers = otelExporterHeaders; exporter.Protocol = OtlpExportProtocol.Grpc;})
-    .Build();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.AddServiceDefaults();
-builder.AddAzureOpenAIClient("openAiConnectionName");
-builder.Services.AddSingleton(builder => {
-    var kernelBuilder = Kernel.CreateBuilder();
-    kernelBuilder.AddAzureOpenAIChatCompletion("gpt-4o-mini", builder.GetService<AzureOpenAIClient>());
-    return kernelBuilder.Build();
-});
+builder.AddAzureOpenAIClient("azureOpenAI");
+builder.Services.Configure<ContentSafetySettings>(builder.Configuration.GetSection("AzureAIContentSafety"));
+builder.Services.AddKernel().AddAzureOpenAIChatCompletion("gpt-4o");
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -66,10 +32,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/group-chat", async (Kernel kernel, string prompt) =>
+app.MapGet("/group-chat", async (Kernel kernel, IOptions<ContentSafetySettings> settings, string prompt) =>
 {
     // Use the clients as needed here
-    var scenario = await InitializeScenarioAsync(kernel);
+    var scenario = await InitializeScenarioAsync(kernel, settings.Value);
     var chat = scenario.Item1;
     var contentSafety = scenario.Item2;
 
@@ -113,23 +79,15 @@ app.MapDefaultEndpoints();
 
 app.Run();
 
-async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kernel)
+async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kernel, ContentSafetySettings settings)
 {
-
-    var configuration = new ConfigurationBuilder()
-        .AddUserSecrets<Program>()
-        .Build();
-
-    string apiKey = configuration["AzureAIContentSafety:ApiKey"];
-    string endpoint = configuration["AzureAIContentSafety:Endpoint"];
-
-    var contentSafety = new ContentSafety(endpoint, apiKey);
+    var contentSafety = new ContentSafety(settings.Endpoint, settings.ApiKey);
 
     //AzureEventSourceListener listener = new AzureEventSourceListener(
     //    (args, text) => Console.WriteLine(text),
     //    level: System.Diagnostics.Tracing.EventLevel.Verbose);
 
-    AIProjectClient client = new AIProjectClient("swedencentral.api.azureml.ms;bc06be43-f36c-449a-b690-4fea320f3e73;ai-agents;ai-agents-project",
+    AIProjectClient client = new AIProjectClient("eastus2.api.azureml.ms;8c831b26-1aef-4843-9513-06420f059cd7;rg-supp-resources;semantic-kernel-ai-service",
     new DefaultAzureCredential(new DefaultAzureCredentialOptions
     {
         ExcludeVisualStudioCredential = true,
@@ -137,7 +95,7 @@ async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kerne
         ExcludeManagedIdentityCredential = true
     }));
     var agentsClient = client.GetAgentsClient();
-    var agent = await agentsClient.GetAgentAsync("asst_XlORPWTtq4FSyMItEw2lbT2a");
+    var agent = await agentsClient.GetAgentAsync("asst_tGeBv0Yl8HYOxPyOy93oCpGv");
 
     string researcherAgentName = "ResearcherAgent";
 

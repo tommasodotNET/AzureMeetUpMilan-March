@@ -486,7 +486,6 @@ namespace SemanticKernel.Agents
             // Replace the placeholders with your own values
             string endpoint = "<endpoint>";
             string subscriptionKey = "<subscription_key>";
-
             // Initialize the ContentSafety object
             ContentSafety contentSafety = new ContentSafety(endpoint, subscriptionKey);
 
