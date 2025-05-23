@@ -19,10 +19,12 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.2" />
     <PackageReference Include="Aspire.Azure.AI.OpenAI" Version="9.0.0-preview.5.24551.3" />
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.52.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.52.0-preview" />
-    <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.52.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Prompty" Version="1.52.0-beta" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.54.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.Orchestration" Version="1.54.0-preview" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.Runtime.InProcess" Version="1.54.0-preview" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.54.0-preview" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.54.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Prompty" Version="1.54.0-beta" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,10 +1,12 @@
-using Azure.AI.Projects;
+using Azure.AI.Agents.Persistent;
 using Azure.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.Agents.AzureAI;
 using Microsoft.SemanticKernel.Agents.Chat;
+using Microsoft.SemanticKernel.Agents.Orchestration.GroupChat;
+using Microsoft.SemanticKernel.Agents.Runtime.InProcess;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.PromptTemplates.Liquid;
 using Microsoft.SemanticKernel.Prompty;
@@ -34,21 +36,33 @@ app.UseHttpsRedirection();
 
 app.MapGet("/group-chat", async (Kernel kernel, IOptions<ContentSafetySettings> settings, string prompt) =>
 {
+    OrchestrationMonitor monitor = new();
+
     // Use the clients as needed here
-    var scenario = await InitializeScenarioAsync(kernel, settings.Value);
-    var chat = scenario.Item1;
+    var scenario = await InitializeScenarioAsync(kernel, monitor, settings.Value);
+    var orchestration = scenario.Item1;
     var contentSafety = scenario.Item2;
 
-    chat.AddChatMessage(new ChatMessageContent(AuthorRole.User, prompt));
-    await foreach (var content in chat.InvokeAsync())
-    {              
+    InProcessRuntime runtime = new InProcessRuntime();
+    await runtime.StartAsync();
 
+    var result = await orchestration.InvokeAsync(prompt, runtime);
+
+    await runtime.RunUntilIdleAsync();
+
+    string text = await result.GetValueAsync(TimeSpan.FromSeconds(90));
+
+    Console.WriteLine($"\n# RESULT: {text}");
+
+    Console.WriteLine("\n\nORCHESTRATION HISTORY");
+    foreach (ChatMessageContent message in monitor.History)
+    {
         // Set the media type and blocklists
         MediaType mediaType = MediaType.Text;
         string[] blocklists = { "banned_tools" };
 
         // Detect content safety
-        DetectionResult detectionResult = await contentSafety.Detect(mediaType, content.Content, blocklists);
+        DetectionResult detectionResult = await contentSafety.Detect(mediaType, message.Content, blocklists);
 
         // Set the reject thresholds for each category
         Dictionary<Category, int> rejectThresholds = new Dictionary<Category, int> {
@@ -65,11 +79,10 @@ app.MapGet("/group-chat", async (Kernel kernel, IOptions<ContentSafetySettings> 
         else
         {
             Console.WriteLine();
-            Console.WriteLine($"# {content.Role} - {content.AuthorName ?? "*"}: '{content.Content}'");
+            Console.WriteLine($"# {message.Role} - {message.AuthorName ?? "*"}: '{message.Content}'");
             Console.WriteLine();
         }
     }
-
 
     return Results.Ok();
 })
@@ -79,29 +92,20 @@ app.MapDefaultEndpoints();
 
 app.Run();
 
-async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kernel, ContentSafetySettings settings)
+async Task<(GroupChatOrchestration, ContentSafety)> InitializeScenarioAsync(Kernel kernel, OrchestrationMonitor monitor, ContentSafetySettings settings)
 {
     var contentSafety = new ContentSafety(settings.Endpoint, settings.ApiKey);
 
-    //AzureEventSourceListener listener = new AzureEventSourceListener(
-    //    (args, text) => Console.WriteLine(text),
-    //    level: System.Diagnostics.Tracing.EventLevel.Verbose);
-
-    AIProjectClient client = new AIProjectClient("eastus2.api.azureml.ms;8c831b26-1aef-4843-9513-06420f059cd7;rg-supp-resources;semantic-kernel-ai-service",
-    new DefaultAzureCredential(new DefaultAzureCredentialOptions
-    {
-        ExcludeVisualStudioCredential = true,
-        ExcludeEnvironmentCredential = true,
-        ExcludeManagedIdentityCredential = true
-    }));
-    var agentsClient = client.GetAgentsClient();
-    var agent = await agentsClient.GetAgentAsync("asst_tGeBv0Yl8HYOxPyOy93oCpGv");
+    PersistentAgentsClient agentsClient = AzureAIAgent.CreateAgentsClient("https://tstocchi-foundry.services.ai.azure.com/api/projects/tstocchi-foundry-project",
+        new AzureCliCredential());
+    PersistentAgent definition = await agentsClient.Administration.GetAgentAsync("asst_v4z53sEtLNEeM3t1eOWRgAhv");
 
     string researcherAgentName = "ResearcherAgent";
 
-    AzureAIAgent researcherAgent = new(agent, agentsClient)
+    AzureAIAgent researcherAgent = new(definition, agentsClient)
     {
         Name = researcherAgentName,
+        Description = "Researcher agent",
         Kernel = kernel
     };
 
@@ -112,6 +116,7 @@ async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kerne
     ChatCompletionAgent writerAgent = new ChatCompletionAgent(promptTemplate, new LiquidPromptTemplateFactory())
     {
         Name = writerAgentName,
+        Description = "Writer agent",
         Kernel = kernel
     };
 
@@ -143,79 +148,27 @@ async Task<(AgentGroupChat, ContentSafety)> InitializeScenarioAsync(Kernel kerne
     {
         Name = reviewerAgentName,
         Instructions = reviewerAgentInstructions,
+        Description = "Reviewer agent",
         Kernel = kernel
     };
 
-    KernelFunction selectionFunction =
-        AgentGroupChat.CreatePromptFunctionForStrategy(
-        $$$"""
-        Determine which participant takes the next turn in a conversation based on the the most recent participant.
-        State only the name of the participant to take the next turn.
-        No participant should take more than one turn in a row.
-
-        Choose only from these participants:
-        - {{{researcherAgentName}}}
-        - {{{writerAgentName}}}
-        - {{{reviewerAgentName}}}
-
-        Always follow these rules when selecting the next participant:
-        - The user will share a topic to research
-        - After the user, it's {{{researcherAgentName}}}'s turn to research the given topic.
-        - After {{{researcherAgentName}}}, it is {{{writerAgentName}}}'s turn to write the text.
-        - After {{{writerAgentName}}}, it is {{{reviewerAgentName}}}'s turn to review the text.
-
-        History:
-        {{$history}}
-        """,
-        safeParameterNames: "history");
-
-    // Define the selection strategy
-    KernelFunctionSelectionStrategy selectionStrategy =
-        new(selectionFunction, kernel)
-        {
-            // Always start with the writer agent.
-            InitialAgent = researcherAgent,
-            // Parse the function response.
-            ResultParser = (result) => result.GetValue<string>() ?? researcherAgentName,
-            // The prompt variable name for the history argument.
-            HistoryVariableName = "history",
-            // Save tokens by not including the entire history in the prompt
-            HistoryReducer = new ChatHistoryTruncationReducer(3),
-        };
-
-    KernelFunction terminationFunction =
-        AgentGroupChat.CreatePromptFunctionForStrategy(
-        $$$"""
-        Determine if the reviewer has approved.  If so, respond with a single word: yes
-
-        History:
-        {{$history}}
-        """,
-        safeParameterNames: "history");
-
-    // Define the termination strategy
-    KernelFunctionTerminationStrategy terminationStrategy =
-        new(terminationFunction, kernel)
-        {
-            // Only the reviewer may give approval.
-            Agents = [reviewerAgent],
-            // Parse the function response.
-            ResultParser = (result) =>
-            result.GetValue<string>()?.Contains("yes", StringComparison.OrdinalIgnoreCase) ?? false,
-            // The prompt variable name for the history argument.
-            HistoryVariableName = "history",
-            // Save tokens by not including the entire history in the prompt
-            HistoryReducer = new ChatHistoryTruncationReducer(1),
-            // Limit total number of turns no matter what
-            MaximumIterations = 10,
-        };
-
-    return (new AgentGroupChat(researcherAgent, writerAgent, reviewerAgent)
+    GroupChatOrchestration orchestration = new GroupChatOrchestration(
+        new RoundRobinGroupChatManager { MaximumInvocationCount = 5 },
+        writerAgent, reviewerAgent)
     {
-        ExecutionSettings = new()
-        {
-            SelectionStrategy = selectionStrategy,
-            TerminationStrategy = terminationStrategy
-        }
-    }, contentSafety);
+        ResponseCallback = monitor.ResponseCallback,
+    };
+
+    return (orchestration, contentSafety);
+}
+
+public class OrchestrationMonitor
+{
+    public ChatHistory History { get; } = [];
+
+    public ValueTask ResponseCallback(ChatMessageContent response)
+    {
+        this.History.Add(response);
+        return ValueTask.CompletedTask;
+    }
 }
