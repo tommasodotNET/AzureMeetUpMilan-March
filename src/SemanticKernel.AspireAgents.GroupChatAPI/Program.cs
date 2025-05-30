@@ -154,7 +154,7 @@ async Task<(GroupChatOrchestration, ContentSafety)> InitializeScenarioAsync(Kern
 
     GroupChatOrchestration orchestration = new GroupChatOrchestration(
         new RoundRobinGroupChatManager { MaximumInvocationCount = 5 },
-        writerAgent, reviewerAgent)
+        researcherAgent, writerAgent, reviewerAgent)
     {
         ResponseCallback = monitor.ResponseCallback,
     };
