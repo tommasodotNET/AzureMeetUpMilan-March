@@ -1,17 +1,13 @@
 using Azure.AI.Agents.Persistent;
 using Azure.Identity;
-using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.Agents.AzureAI;
-using Microsoft.SemanticKernel.Agents.Chat;
 using Microsoft.SemanticKernel.Agents.Orchestration.GroupChat;
 using Microsoft.SemanticKernel.Agents.Runtime.InProcess;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.PromptTemplates.Liquid;
 using Microsoft.SemanticKernel.Prompty;
-using SemanticKernel.Agents;
-using SemanticKernel.AspireAgents.GroupChatAPI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,8 +17,10 @@ AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiag
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.AddServiceDefaults();
-builder.AddAzureOpenAIClient("azureOpenAI");
-builder.Services.Configure<ContentSafetySettings>(builder.Configuration.GetSection("AzureAIContentSafety"));
+builder.AddAzureOpenAIClient("azureOpenAI", configureSettings: settings =>
+{
+    settings.Credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions() { TenantId = "16b3c013-d300-468d-ac64-7eda0820b6d3" });
+});
 builder.Services.AddKernel().AddAzureOpenAIChatCompletion("gpt-4o");
 var app = builder.Build();
 
@@ -34,54 +32,30 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/group-chat", async (Kernel kernel, IOptions<ContentSafetySettings> settings, string prompt) =>
+app.MapGet("/group-chat", async (Kernel kernel, string prompt) =>
 {
-    OrchestrationMonitor monitor = new();
+    // OrchestrationMonitor monitor = new();
 
     // Use the clients as needed here
-    var scenario = await InitializeScenarioAsync(kernel, monitor, settings.Value);
-    var orchestration = scenario.Item1;
-    var contentSafety = scenario.Item2;
+    var monitor = new OrchestrationMonitor();
+    var scenario = await InitializeScenarioAsync(kernel, monitor);
 
     InProcessRuntime runtime = new InProcessRuntime();
     await runtime.StartAsync();
 
-    var result = await orchestration.InvokeAsync(prompt, runtime);
-
-    await runtime.RunUntilIdleAsync();
+    var result = await scenario.InvokeAsync(prompt, runtime);
 
     string text = await result.GetValueAsync(TimeSpan.FromSeconds(90));
 
+    await runtime.RunUntilIdleAsync();
     Console.WriteLine($"\n# RESULT: {text}");
-
     Console.WriteLine("\n\nORCHESTRATION HISTORY");
+
     foreach (ChatMessageContent message in monitor.History)
     {
-        // Set the media type and blocklists
-        MediaType mediaType = MediaType.Text;
-        string[] blocklists = { "banned_tools" };
-
-        // Detect content safety
-        DetectionResult detectionResult = await contentSafety.Detect(mediaType, message.Content, blocklists);
-
-        // Set the reject thresholds for each category
-        Dictionary<Category, int> rejectThresholds = new Dictionary<Category, int> {
-            { Category.Hate, 4 }, { Category.SelfHarm, 4 }, { Category.Sexual, 4 }, { Category.Violence, 4 }
-        };
-
-        // Make a decision based on the detection result and reject thresholds
-        Decision decisionResult = contentSafety.MakeDecision(detectionResult, rejectThresholds);
-
-        if (decisionResult.SuggestedAction == SemanticKernel.Agents.Action.Reject)
-        {
-            Console.WriteLine($"The content has been rejected");
-        }
-        else
-        {
-            Console.WriteLine();
-            Console.WriteLine($"# {message.Role} - {message.AuthorName ?? "*"}: '{message.Content}'");
-            Console.WriteLine();
-        }
+        Console.WriteLine();
+        Console.WriteLine($"# {message.Role} - {message.AuthorName ?? "*"}: '{message.Content}'");
+        Console.WriteLine();
     }
 
     return Results.Ok();
@@ -92,10 +66,8 @@ app.MapDefaultEndpoints();
 
 app.Run();
 
-async Task<(GroupChatOrchestration, ContentSafety)> InitializeScenarioAsync(Kernel kernel, OrchestrationMonitor monitor, ContentSafetySettings settings)
+async Task<GroupChatOrchestration> InitializeScenarioAsync(Kernel kernel, OrchestrationMonitor monitor)
 {
-    var contentSafety = new ContentSafety(settings.Endpoint, settings.ApiKey);
-
     PersistentAgentsClient agentsClient = AzureAIAgent.CreateAgentsClient("https://tstocchi-foundry.services.ai.azure.com/api/projects/tstocchi-foundry-project",
         new AzureCliCredential());
     PersistentAgent definition = await agentsClient.Administration.GetAgentAsync("asst_v4z53sEtLNEeM3t1eOWRgAhv");
@@ -154,12 +126,12 @@ async Task<(GroupChatOrchestration, ContentSafety)> InitializeScenarioAsync(Kern
 
     GroupChatOrchestration orchestration = new GroupChatOrchestration(
         new RoundRobinGroupChatManager { MaximumInvocationCount = 5 },
-        researcherAgent, writerAgent, reviewerAgent)
+        writerAgent, reviewerAgent)
     {
         ResponseCallback = monitor.ResponseCallback,
     };
 
-    return (orchestration, contentSafety);
+    return orchestration;
 }
 
 public class OrchestrationMonitor
